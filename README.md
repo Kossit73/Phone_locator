@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ## Run the app
 
 ```bash
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
 Open `http://localhost:8501` and follow the prompts to generate a sharing link.
