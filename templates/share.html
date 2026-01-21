@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Share Location</title>
+    <style>
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        margin: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      main {
+        max-width: 720px;
+        margin: 3rem auto;
+        background: #111827;
+        padding: 2.5rem;
+        border-radius: 16px;
+      }
+      button {
+        padding: 0.9rem 1.2rem;
+        border-radius: 12px;
+        border: none;
+        background: #22c55e;
+        color: #0f172a;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: #1e293b;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Share your location</h1>
+      <p>
+        Tap the button below to securely share your current location. Your browser
+        will ask for permission.
+      </p>
+      <button id="shareBtn">Share my location</button>
+      <div class="status" id="status">Waiting for your permission.</div>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const shareBtn = document.getElementById("shareBtn");
+
+      shareBtn.addEventListener("click", () => {
+        statusEl.textContent = "Requesting location...";
+
+        if (!navigator.geolocation) {
+          statusEl.textContent = "Geolocation is not supported in this browser.";
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const payload = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            };
+
+            const response = await fetch(`/api/location/{{ token }}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              }
+            );
+
+            if (response.ok) {
+              statusEl.textContent = "Location shared successfully!";
+            } else {
+              statusEl.textContent = "Unable to share location. Please try again.";
+            }
+          },
+          (error) => {
+            statusEl.textContent = `Location error: ${error.message}`;
+          },
+          { enableHighAccuracy: true, timeout: 15000 }
+        );
+      });
+    </script>
+  </body>
+</html>
