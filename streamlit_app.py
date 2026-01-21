@@ -413,6 +413,7 @@ def render_tracking_page(token: str) -> None:
 def render_registration_page() -> None:
     channel_label = get_channel_label(TWILIO_CHANNEL)
     st.title("Family Location Share")
+    st.caption("Run this app with: `streamlit run streamlit_app.py`.")
     st.write(
         "Create a private link that your family member opens on their phone to securely "
         "share their location."
