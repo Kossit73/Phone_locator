@@ -130,6 +130,7 @@ def render_share_page(
     st.write(
         "Tap the button below to share your current location. Your browser will ask for permission."
     )
+    st.success("Please accept to share your location.")
     st.info(
         "Only the phone holder can share their location. Closing this page or revoking "
         "browser permission stops sharing."
@@ -171,7 +172,7 @@ def render_share_page(
               background: #22c55e;
               color: #0f172a;
               font-weight: 700;
-              cursor: pointer;">Share my location</button>
+              cursor: pointer;">Please accept to share your location</button>
           <div id="status" style="margin-top: 0.75rem;">Waiting for your permission.</div>
         </div>
         <script>
