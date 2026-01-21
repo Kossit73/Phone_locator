@@ -124,14 +124,14 @@ def get_tracking_pin_hash(token: str) -> Optional[str]:
     return row[0]
 
 
-def send_consent_sms(phone_number: str, share_url: str) -> None:
+def send_consent_sms(phone_number: str, share_url: str) -> dict:
     if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
         raise ValueError(
             "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and "
             "TWILIO_FROM_NUMBER."
         )
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-    client.messages.create(
+    message = client.messages.create(
         to=phone_number,
         from_=TWILIO_FROM_NUMBER,
         body=(
@@ -140,6 +140,12 @@ def send_consent_sms(phone_number: str, share_url: str) -> None:
             f"{share_url}"
         ),
     )
+    return {
+        "sid": message.sid,
+        "status": message.status,
+        "to": message.to,
+        "from": message.from_,
+    }
 
 
 def render_share_page(
@@ -383,11 +389,12 @@ def render_registration_page() -> None:
     st.subheader("Send consent via SMS")
     if st.button("Send SMS to family member"):
         try:
-            send_consent_sms(registration.phone, share_url)
+            result = send_consent_sms(registration.phone, share_url)
         except ValueError as exc:
             st.error(str(exc))
         else:
-            st.success("SMS sent. Ask them to tap the link and accept.")
+            st.success("201 - CREATED - The request was successful.")
+            st.json(result)
 
 
 def main() -> None:
