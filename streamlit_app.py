@@ -44,6 +44,16 @@ def get_db_connection() -> sqlite3.Connection:
     return sqlite3.connect(DATABASE_PATH)
 
 
+@st.cache_resource
+def get_twilio_client() -> Client:
+    return Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+
+def get_channel_label(channel: str) -> str:
+    return "WhatsApp" if channel == "whatsapp" else "SMS"
+
+
+
 def register_phone(phone_number: str, tracking_pin: str) -> RegistrationResult:
     token = secrets.token_urlsafe(16)
     with get_db_connection() as connection:
@@ -139,7 +149,7 @@ def send_consent_sms(phone_number: str, share_url: str) -> dict:
         )
     if TWILIO_CHANNEL not in {"sms", "whatsapp"}:
         raise ValueError("TWILIO_CHANNEL must be set to 'sms' or 'whatsapp'.")
-    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client = get_twilio_client()
     message = client.messages.create(
         to=_format_twilio_number(phone_number, TWILIO_CHANNEL),
         from_=_format_twilio_number(TWILIO_FROM_NUMBER, TWILIO_CHANNEL),
@@ -168,30 +178,11 @@ def get_twilio_debug_info(phone_number: str) -> dict:
     }
 
 
-def render_share_page(
+def render_live_tracking_controls(
     token: str,
-    latest_location: Optional[LocationRecord],
     live_enabled: bool,
     live_interval: int,
-) -> None:
-    st.title("Share your location")
-    st.markdown("### Please accept to share your location")
-    st.write(
-        "Tap **Yes** to share once, or enable live tracking for continuous updates."
-    )
-    st.success("Your location will only be shared after you choose Yes.")
-    st.info(
-        "Only the phone holder can share their location. Closing this page or revoking "
-        "browser permission stops sharing."
-    )
-    st.caption("Tip: Stay on this page to keep live tracking active.")
-
-    if latest_location:
-        st.info(
-            "A location was already shared. You can share again to update it for your family."
-        )
-        st.caption(f"Last consented at: {latest_location.recorded_at}")
-
+) -> tuple[bool, int]:
     enable_live = st.checkbox("Enable live tracking", value=live_enabled)
     interval_seconds = st.number_input(
         "Live tracking interval (seconds)",
@@ -209,8 +200,11 @@ def render_share_page(
             interval=str(interval_seconds),
         )
         st.stop()
+    return enable_live, interval_seconds
 
-    live_flag = "true" if enable_live else "false"
+
+def render_share_buttons(token: str, live_enabled: bool, interval_seconds: int) -> None:
+    live_flag = "true" if live_enabled else "false"
     st.components.v1.html(
         f"""
         <div style="margin-top: 1rem;">
@@ -286,6 +280,52 @@ def render_share_page(
         """,
         height=320,
     )
+
+
+def render_channel_debug(phone_number: str) -> None:
+    channel_label = get_channel_label(TWILIO_CHANNEL)
+    try:
+        debug_info = get_twilio_debug_info(phone_number)
+    except ValueError as exc:
+        st.error(str(exc))
+    else:
+        st.caption(
+            "Message channel: "
+            f"**{channel_label}** | From: {debug_info['from']} | "
+            f"To: {debug_info['to']}"
+        )
+
+
+def render_share_page(
+    token: str,
+    latest_location: Optional[LocationRecord],
+    live_enabled: bool,
+    live_interval: int,
+) -> None:
+    st.title("Share your location")
+    st.markdown("### Please accept to share your location")
+    st.write(
+        "Tap **Yes** to share once, or enable live tracking for continuous updates."
+    )
+    st.success("Your location will only be shared after you choose Yes.")
+    st.info(
+        "Only the phone holder can share their location. Closing this page or revoking "
+        "browser permission stops sharing."
+    )
+    st.caption("Tip: Stay on this page to keep live tracking active.")
+
+    if latest_location:
+        st.info(
+            "A location was already shared. You can share again to update it for your family."
+        )
+        st.caption(f"Last consented at: {latest_location.recorded_at}")
+
+    enable_live, interval_seconds = render_live_tracking_controls(
+        token,
+        live_enabled,
+        live_interval,
+    )
+    render_share_buttons(token, enable_live, interval_seconds)
 
     st.caption("Only share this link with family you trust. You can close it any time.")
 
@@ -406,18 +446,9 @@ def render_registration_page() -> None:
         ),
         height=140,
     )
-    channel_label = "WhatsApp" if TWILIO_CHANNEL == "whatsapp" else "SMS"
+    channel_label = get_channel_label(TWILIO_CHANNEL)
     st.subheader(f"Send consent via {channel_label}")
-    try:
-        debug_info = get_twilio_debug_info(registration.phone)
-    except ValueError as exc:
-        st.error(str(exc))
-    else:
-        st.caption(
-            "Message channel: "
-            f"**{channel_label}** | From: {debug_info['from']} | "
-            f"To: {debug_info['to']}"
-        )
+    render_channel_debug(registration.phone)
     if st.button("Send SMS to family member"):
         try:
             result = send_consent_sms(registration.phone, share_url)
