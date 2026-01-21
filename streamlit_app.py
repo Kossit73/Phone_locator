@@ -5,6 +5,7 @@ import secrets
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import math
 from typing import Optional
 
 import streamlit as st
@@ -38,6 +39,8 @@ TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER")
 TWILIO_CHANNEL = os.environ.get("TWILIO_CHANNEL", "sms").lower()
 MAX_HISTORY = 20
+MIN_DISTANCE_METERS = float(os.environ.get("LOCATION_MIN_DISTANCE_METERS", "20"))
+MAX_ACCEPTABLE_ACCURACY = float(os.environ.get("LOCATION_MAX_ACCURACY_METERS", "100"))
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -118,7 +121,7 @@ def read_location_history(token: str, limit: int = MAX_HISTORY) -> list[dict]:
             "Latitude": row[0],
             "Longitude": row[1],
             "Accuracy (m)": row[2] if row[2] is not None else "Unknown",
-            "Shared at": row[3],
+            "Shared at": format_timestamp(row[3]),
         }
         for row in rows
     ]
@@ -133,6 +136,28 @@ def get_tracking_pin_hash(token: str) -> Optional[str]:
     if not row:
         return None
     return row[0]
+
+
+def haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6371000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return 2 * radius * math.asin(math.sqrt(a))
+
+
+def format_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    local = parsed.astimezone()
+    return local.strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
 def _format_twilio_number(phone_number: str, channel: str) -> str:
@@ -318,7 +343,7 @@ def render_share_page(
         st.info(
             "A location was already shared. You can share again to update it for your family."
         )
-        st.caption(f"Last consented at: {latest_location.recorded_at}")
+        st.caption(f"Last consented at: {format_timestamp(latest_location.recorded_at)}")
 
     enable_live, interval_seconds = render_live_tracking_controls(
         token,
@@ -352,7 +377,7 @@ def render_tracking_page(token: str) -> None:
         st.warning("No location has been shared yet.")
         return
 
-    st.success(f"Last consented at: {location.recorded_at}")
+    st.success(f"Last consented at: {format_timestamp(location.recorded_at)}")
     col1, col2, col3 = st.columns(3)
     col1.metric("Latitude", f"{location.latitude:.6f}")
     col2.metric("Longitude", f"{location.longitude:.6f}")
@@ -393,6 +418,11 @@ def render_registration_page() -> None:
     st.caption(
         "Phone numbers only identify the country/region. Exact location requires the recipient to share it."
     )
+    if BASE_URL.startswith("http://localhost"):
+        st.warning(
+            "Set LOCATION_APP_BASE_URL to your public app URL so share links work "
+            "on phones outside this machine."
+        )
     st.subheader("Share in 3 steps")
     st.write(
         "1. Create the share link below.\n"
@@ -474,12 +504,34 @@ def main() -> None:
         interval = int(params.get("interval", ["30"])[0])
 
         if shared and lat and lon:
+            latest = read_latest_location(token)
+            new_lat = float(lat)
+            new_lon = float(lon)
+            new_accuracy = float(accuracy) if accuracy else None
+            if new_accuracy and new_accuracy > MAX_ACCEPTABLE_ACCURACY:
+                st.warning(
+                    "Low GPS accuracy detected. Consider moving to an open area "
+                    "before sharing."
+                )
+                render_share_page(token, latest, live, interval)
+                return
+            if latest:
+                distance = haversine_meters(
+                    latest.latitude, latest.longitude, new_lat, new_lon
+                )
+                if distance < MIN_DISTANCE_METERS:
+                    st.info(
+                        "Location change is within the minimum distance threshold. "
+                        "Skipping save to reduce GPS noise."
+                    )
+                    render_share_page(token, latest, live, interval)
+                    return
             location = store_location(
                 database_path=DATABASE_PATH,
                 token=token,
-                latitude=float(lat),
-                longitude=float(lon),
-                accuracy=float(accuracy) if accuracy else None,
+                latitude=new_lat,
+                longitude=new_lon,
+                accuracy=new_accuracy,
             )
             st.success("Location shared successfully!")
             st.write(f"Latitude: {location.latitude}, Longitude: {location.longitude}")
