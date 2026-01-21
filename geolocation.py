@@ -81,6 +81,42 @@ def phone_number_country(phone_number: str) -> Optional[str]:
     return description or None
 
 
+def normalize_place_type(place_type: Optional[str], category: Optional[str]) -> Optional[str]:
+    if not place_type and not category:
+        return None
+
+    raw = (place_type or category or "").lower()
+    mapping = {
+        "school": "School",
+        "college": "College",
+        "university": "University",
+        "hospital": "Hospital",
+        "clinic": "Clinic",
+        "hotel": "Hotel",
+        "motel": "Hotel",
+        "hostel": "Hotel",
+        "residential": "Residential area",
+        "apartments": "Residential area",
+        "house": "Residential area",
+        "neighbourhood": "Residential area",
+        "supermarket": "Retail area",
+        "mall": "Retail area",
+        "shopping_centre": "Retail area",
+        "office": "Office",
+        "industrial": "Industrial area",
+        "park": "Park",
+        "stadium": "Stadium",
+        "airport": "Airport",
+        "station": "Transit station",
+    }
+
+    for key, label in mapping.items():
+        if key in raw:
+            return label
+
+    return place_type or category
+
+
 def ensure_database(database_path: str) -> None:
     with sqlite3.connect(database_path) as connection:
         connection.execute(
@@ -133,17 +169,20 @@ def store_location(
     )
 
 
-def reverse_geocode(latitude: float, longitude: float) -> Tuple[Optional[str], Optional[str]]:
+def reverse_geocode(
+    latitude: float, longitude: float
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     geolocator = Nominatim(user_agent="family-location-app")
     try:
         location = geolocator.reverse((latitude, longitude), exactly_one=True, timeout=10)
     except GeocoderServiceError:
-        return None, None
+        return None, None, None
 
     if not location:
-        return None, None
+        return None, None, None
 
     address = location.address
     raw = location.raw or {}
     place_type = raw.get("type") or raw.get("category")
-    return address, place_type
+    place_label = normalize_place_type(raw.get("type"), raw.get("category"))
+    return address, place_type, place_label

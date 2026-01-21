@@ -146,11 +146,11 @@ def render_tracking_page(token: str) -> None:
     st.write(f"Accuracy: {location.accuracy or 'Unknown'} meters")
     st.write(f"Shared at: {location.recorded_at}")
 
-    address, place_type = reverse_geocode(location.latitude, location.longitude)
+    address, place_type, place_label = reverse_geocode(location.latitude, location.longitude)
     if address:
         st.write(f"Approximate address: {address}")
-    if place_type:
-        st.write(f"Place type: {place_type}")
+    if place_label or place_type:
+        st.write(f"Place type: {place_label or place_type}")
 
     st.markdown(f"[Open on map]({location.map_link()})")
     st.caption("Refresh this page to load the most recent update.")
@@ -217,11 +217,13 @@ def main() -> None:
             )
             st.success("Location shared successfully!")
             st.write(f"Latitude: {location.latitude}, Longitude: {location.longitude}")
-            address, place_type = reverse_geocode(location.latitude, location.longitude)
+            address, place_type, place_label = reverse_geocode(
+                location.latitude, location.longitude
+            )
             if address:
                 st.write(f"Approximate address: {address}")
-            if place_type:
-                st.write(f"Place type: {place_type}")
+            if place_label or place_type:
+                st.write(f"Place type: {place_label or place_type}")
 
         latest_location = read_latest_location(token)
         render_share_page(token, latest_location)
