@@ -10,7 +10,7 @@ are only used to identify who should receive the link and the country/region.
 - Phone number validation using `phonenumbers` (requires country code).
 - Location capture using the browser's Geolocation API (explicit consent required).
 - Optional reverse geocoding via `geopy`/Nominatim.
-- Simple tracking page that shows the last shared location.
+- Simple tracking dashboard that shows the last shared location on a map.
 
 ## Requirements
 
