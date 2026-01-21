@@ -130,16 +130,21 @@ def render_share_page(
     st.write(
         "Tap the button below to share your current location. Your browser will ask for permission."
     )
+    st.info(
+        "Only the phone holder can share their location. Closing this page or revoking "
+        "browser permission stops sharing."
+    )
 
     if latest_location:
         st.info(
             "A location was already shared. You can share again to update it for your family."
         )
+        st.caption(f"Last consented at: {latest_location.recorded_at}")
 
     enable_live = st.checkbox("Enable live tracking", value=live_enabled)
     interval_seconds = st.number_input(
         "Live tracking interval (seconds)",
-        min_value=10,
+        min_value=5,
         max_value=300,
         value=live_interval,
         step=5,
@@ -175,7 +180,9 @@ def render_share_page(
           const liveIntervalMs = {interval_seconds} * 1000;
 
           function requestLocation() {{
-            statusEl.textContent = "Requesting location...";
+            statusEl.textContent = liveEnabled
+              ? "Live tracking is on. Requesting location..."
+              : "Requesting location...";
             if (!navigator.geolocation) {{
               statusEl.textContent = "Geolocation is not supported in this browser.";
               return;
@@ -227,10 +234,11 @@ def render_tracking_page(token: str) -> None:
         st.warning("No location has been shared yet.")
         return
 
-    st.metric("Latitude", f"{location.latitude:.6f}")
-    st.metric("Longitude", f"{location.longitude:.6f}")
-    st.write(f"Accuracy: {location.accuracy or 'Unknown'} meters")
     st.success(f"Last consented at: {location.recorded_at}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Latitude", f"{location.latitude:.6f}")
+    col2.metric("Longitude", f"{location.longitude:.6f}")
+    col3.metric("Accuracy (m)", f"{location.accuracy or 'Unknown'}")
     if location.accuracy and location.accuracy > 100:
         st.warning("Low GPS accuracy detected. Location may be approximate.")
 
@@ -266,6 +274,12 @@ def render_registration_page() -> None:
     )
     st.caption(
         "Phone numbers only identify the country/region. Exact location requires the recipient to share it."
+    )
+    st.subheader("Share in 3 steps")
+    st.write(
+        "1. Create the share link below.\n"
+        "2. Send it to your family member and ask them to approve the location request.\n"
+        "3. Use the dashboard to view the latest consented update."
     )
 
     with st.form("register"):
@@ -304,6 +318,16 @@ def render_registration_page() -> None:
     st.code(share_url, language="text")
     st.write("Tracking page:")
     st.code(track_url, language="text")
+    st.subheader("Suggested message to send")
+    st.text_area(
+        "Copy this message into WhatsApp, SMS, or email.",
+        value=(
+            "Hi! Please open this link and tap “Share my location” so I can see your "
+            "current location. You can stop sharing anytime by closing the page:\n"
+            f"{share_url}"
+        ),
+        height=140,
+    )
 
 
 def main() -> None:
