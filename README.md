@@ -48,20 +48,20 @@ Set a strong salt for tracking PIN hashing:
 export LOCATION_PIN_SALT="replace-with-a-random-secret"
 ```
 
-To enable SMS delivery with Twilio (optional):
+To enable WhatsApp delivery with Twilio (optional):
 
 ```bash
 export TWILIO_ACCOUNT_SID="your-account-sid"
 export TWILIO_AUTH_TOKEN="your-auth-token"
-export TWILIO_FROM_NUMBER="+15551234567"
-export TWILIO_CHANNEL="sms"
+export TWILIO_CHANNEL="whatsapp"
+export TWILIO_FROM_NUMBER="whatsapp:+14155238886"
 ```
 
-To send WhatsApp messages instead of SMS:
+To send SMS messages instead of WhatsApp:
 
 ```bash
-export TWILIO_FROM_NUMBER="whatsapp:+14155238886"
-export TWILIO_CHANNEL="whatsapp"
+export TWILIO_FROM_NUMBER="+15551234567"
+export TWILIO_CHANNEL="sms"
 ```
 
 ## Notes
@@ -70,4 +70,4 @@ export TWILIO_CHANNEL="whatsapp"
 - Country/region is derived from the phone number, while precise location and place type
   come from the shared coordinates via reverse geocoding.
 - The database is stored locally in `locations.db`.
-- For production, add authentication, HTTPS, and SMS delivery (for example with Twilio).
+- For production, add authentication, HTTPS, and WhatsApp/SMS delivery (for example with Twilio).
