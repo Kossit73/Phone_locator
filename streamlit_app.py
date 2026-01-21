@@ -406,7 +406,8 @@ def render_registration_page() -> None:
         ),
         height=140,
     )
-    st.subheader("Send consent via SMS")
+    channel_label = "WhatsApp" if TWILIO_CHANNEL == "whatsapp" else "SMS"
+    st.subheader(f"Send consent via {channel_label}")
     try:
         debug_info = get_twilio_debug_info(registration.phone)
     except ValueError as exc:
@@ -414,7 +415,7 @@ def render_registration_page() -> None:
     else:
         st.caption(
             "Message channel: "
-            f"**{debug_info['channel'].upper()}** | From: {debug_info['from']} | "
+            f"**{channel_label}** | From: {debug_info['from']} | "
             f"To: {debug_info['to']}"
         )
     if st.button("Send SMS to family member"):
