@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import streamlit as st
+from twilio.rest import Client
 
 from geolocation import (
     LocationRecord,
@@ -32,6 +33,9 @@ DATABASE_PATH = os.environ.get(
 )
 BASE_URL = os.environ.get("LOCATION_APP_BASE_URL", "http://localhost:8501")
 PIN_SALT = os.environ.get("LOCATION_PIN_SALT", "change-me")
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER")
 MAX_HISTORY = 20
 
 
@@ -120,6 +124,24 @@ def get_tracking_pin_hash(token: str) -> Optional[str]:
     return row[0]
 
 
+def send_consent_sms(phone_number: str, share_url: str) -> None:
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
+        raise ValueError(
+            "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and "
+            "TWILIO_FROM_NUMBER."
+        )
+    client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    client.messages.create(
+        to=phone_number,
+        from_=TWILIO_FROM_NUMBER,
+        body=(
+            "Please accept to share your location by opening this link and tapping "
+            "Yes: "
+            f"{share_url}"
+        ),
+    )
+
+
 def render_share_page(
     token: str,
     latest_location: Optional[LocationRecord],
@@ -127,10 +149,11 @@ def render_share_page(
     live_interval: int,
 ) -> None:
     st.title("Share your location")
+    st.markdown("### Please accept to share your location")
     st.write(
-        "Tap the button below to share your current location. Your browser will ask for permission."
+        "Tap **Yes** to share once, or enable live tracking for continuous updates."
     )
-    st.success("Please accept to share your location.")
+    st.success("Your location will only be shared after you choose Yes.")
     st.info(
         "Only the phone holder can share their location. Closing this page or revoking "
         "browser permission stops sharing."
@@ -166,23 +189,29 @@ def render_share_page(
         f"""
         <div style="margin-top: 1rem;">
           <button id="shareBtn" style="
-              padding: 0.75rem 1.25rem;
-              border-radius: 10px;
+              padding: 1rem 1.5rem;
+              border-radius: 12px;
               border: none;
               background: #22c55e;
               color: #0f172a;
-              font-weight: 700;
+              font-weight: 800;
+              font-size: 1rem;
+              width: 100%;
               cursor: pointer;">Yes, share my location</button>
           <button id="rejectBtn" style="
-              padding: 0.75rem 1.25rem;
-              border-radius: 10px;
+              padding: 1rem 1.5rem;
+              border-radius: 12px;
               border: none;
               background: #ef4444;
               color: #f8fafc;
-              font-weight: 700;
+              font-weight: 800;
+              font-size: 1rem;
+              width: 100%;
               cursor: pointer;
-              margin-left: 0.5rem;">No, do not share</button>
-          <div id="status" style="margin-top: 0.75rem;">Waiting for your permission.</div>
+              margin-top: 0.75rem;">No, do not share</button>
+          <div id="status" style="margin-top: 0.75rem; font-weight: 600;">
+            Waiting for your permission.
+          </div>
         </div>
         <script>
           const statusEl = document.getElementById("status");
@@ -229,7 +258,7 @@ def render_share_page(
           }}
         </script>
         """,
-        height=260,
+        height=320,
     )
 
     st.caption("Only share this link with family you trust. You can close it any time.")
@@ -351,6 +380,14 @@ def render_registration_page() -> None:
         ),
         height=140,
     )
+    st.subheader("Send consent via SMS")
+    if st.button("Send SMS to family member"):
+        try:
+            send_consent_sms(registration.phone, share_url)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            st.success("SMS sent. Ask them to tap the link and accept.")
 
 
 def main() -> None:

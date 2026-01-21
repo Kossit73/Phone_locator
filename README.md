@@ -48,6 +48,14 @@ Set a strong salt for tracking PIN hashing:
 export LOCATION_PIN_SALT="replace-with-a-random-secret"
 ```
 
+To enable SMS delivery with Twilio (optional):
+
+```bash
+export TWILIO_ACCOUNT_SID="your-account-sid"
+export TWILIO_AUTH_TOKEN="your-auth-token"
+export TWILIO_FROM_NUMBER="+15551234567"
+```
+
 ## Notes
 
 - Location sharing requires the family member to tap **Allow** on their phone.
