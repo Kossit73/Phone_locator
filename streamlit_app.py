@@ -134,6 +134,7 @@ def render_share_page(
         "Only the phone holder can share their location. Closing this page or revoking "
         "browser permission stops sharing."
     )
+    st.caption("Tip: Stay on this page to keep live tracking active.")
 
     if latest_location:
         st.info(
@@ -222,12 +223,20 @@ def render_share_page(
 
 def render_tracking_page(token: str) -> None:
     st.title("Latest shared location")
+    st.caption(
+        "This dashboard only shows locations explicitly shared by the phone holder."
+    )
 
     pin_hash = get_tracking_pin_hash(token)
     pin = st.text_input("Tracking PIN", type="password")
     if pin_hash and not verify_tracking_pin(pin, PIN_SALT, pin_hash):
         st.warning("Enter the tracking PIN to view the location dashboard.")
         return
+
+    auto_refresh = st.checkbox("Auto-refresh dashboard", value=True)
+    refresh_seconds = st.slider("Refresh every (seconds)", 5, 120, 15)
+    if auto_refresh:
+        st.autorefresh(interval=refresh_seconds * 1000, key="track-refresh")
 
     location = read_latest_location(token)
     if not location:
