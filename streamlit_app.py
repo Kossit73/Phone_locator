@@ -411,22 +411,24 @@ def render_tracking_page(token: str) -> None:
 
 
 def render_registration_page() -> None:
+    channel_label = get_channel_label(TWILIO_CHANNEL)
     st.title("Family Location Share")
     st.write(
-        "Create a private link that your family member opens on their phone to securely share their location."
+        "Create a private link that your family member opens on their phone to securely "
+        "share their location."
     )
     st.caption(
         "Phone numbers only identify the country/region. Exact location requires the recipient to share it."
     )
     if BASE_URL.startswith("http://localhost"):
-        st.warning(
-            "Set LOCATION_APP_BASE_URL to your public app URL so share links work "
+        st.info(
+            "Tip: Set LOCATION_APP_BASE_URL to your public app URL so share links work "
             "on phones outside this machine."
         )
     st.subheader("Share in 3 steps")
     st.write(
-        "1. Create the share link below.\n"
-        "2. Send it to your family member and ask them to approve the location request.\n"
+        "1. Create the sharing link below.\n"
+        f"2. Send it to your family member via {channel_label} and ask them to approve.\n"
         "3. Use the dashboard to view the latest consented update."
     )
 
@@ -476,10 +478,9 @@ def render_registration_page() -> None:
         ),
         height=140,
     )
-    channel_label = get_channel_label(TWILIO_CHANNEL)
     st.subheader(f"Send consent via {channel_label}")
     render_channel_debug(registration.phone)
-    if st.button("Send SMS to family member"):
+    if st.button(f"Send consent via {channel_label}"):
         try:
             result = send_consent_sms(registration.phone, share_url)
         except ValueError as exc:
