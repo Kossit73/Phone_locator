@@ -36,6 +36,7 @@ PIN_SALT = os.environ.get("LOCATION_PIN_SALT", "change-me")
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 TWILIO_FROM_NUMBER = os.environ.get("TWILIO_FROM_NUMBER")
+TWILIO_CHANNEL = os.environ.get("TWILIO_CHANNEL", "sms").lower()
 MAX_HISTORY = 20
 
 
@@ -124,16 +125,24 @@ def get_tracking_pin_hash(token: str) -> Optional[str]:
     return row[0]
 
 
+def _format_twilio_number(phone_number: str, channel: str) -> str:
+    if channel == "whatsapp":
+        return phone_number if phone_number.startswith("whatsapp:") else f"whatsapp:{phone_number}"
+    return phone_number.replace("whatsapp:", "")
+
+
 def send_consent_sms(phone_number: str, share_url: str) -> dict:
     if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER):
         raise ValueError(
             "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and "
             "TWILIO_FROM_NUMBER."
         )
+    if TWILIO_CHANNEL not in {"sms", "whatsapp"}:
+        raise ValueError("TWILIO_CHANNEL must be set to 'sms' or 'whatsapp'.")
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     message = client.messages.create(
-        to=phone_number,
-        from_=TWILIO_FROM_NUMBER,
+        to=_format_twilio_number(phone_number, TWILIO_CHANNEL),
+        from_=_format_twilio_number(TWILIO_FROM_NUMBER, TWILIO_CHANNEL),
         body=(
             "Please accept to share your location by opening this link and tapping "
             "Yes: "
@@ -145,6 +154,7 @@ def send_consent_sms(phone_number: str, share_url: str) -> dict:
         "status": message.status,
         "to": message.to,
         "from": message.from_,
+        "channel": TWILIO_CHANNEL,
     }
 
 

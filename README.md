@@ -54,6 +54,14 @@ To enable SMS delivery with Twilio (optional):
 export TWILIO_ACCOUNT_SID="your-account-sid"
 export TWILIO_AUTH_TOKEN="your-auth-token"
 export TWILIO_FROM_NUMBER="+15551234567"
+export TWILIO_CHANNEL="sms"
+```
+
+To send WhatsApp messages instead of SMS:
+
+```bash
+export TWILIO_FROM_NUMBER="whatsapp:+14155238886"
+export TWILIO_CHANNEL="whatsapp"
 ```
 
 ## Notes
