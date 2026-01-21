@@ -158,6 +158,16 @@ def send_consent_sms(phone_number: str, share_url: str) -> dict:
     }
 
 
+def get_twilio_debug_info(phone_number: str) -> dict:
+    if TWILIO_CHANNEL not in {"sms", "whatsapp"}:
+        raise ValueError("TWILIO_CHANNEL must be set to 'sms' or 'whatsapp'.")
+    return {
+        "channel": TWILIO_CHANNEL,
+        "from": _format_twilio_number(TWILIO_FROM_NUMBER or "", TWILIO_CHANNEL),
+        "to": _format_twilio_number(phone_number, TWILIO_CHANNEL),
+    }
+
+
 def render_share_page(
     token: str,
     latest_location: Optional[LocationRecord],
@@ -397,6 +407,16 @@ def render_registration_page() -> None:
         height=140,
     )
     st.subheader("Send consent via SMS")
+    try:
+        debug_info = get_twilio_debug_info(registration.phone)
+    except ValueError as exc:
+        st.error(str(exc))
+    else:
+        st.caption(
+            "Message channel: "
+            f"**{debug_info['channel'].upper()}** | From: {debug_info['from']} | "
+            f"To: {debug_info['to']}"
+        )
     if st.button("Send SMS to family member"):
         try:
             result = send_consent_sms(registration.phone, share_url)
