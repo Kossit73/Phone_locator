@@ -12,10 +12,12 @@ import streamlit as st
 from geolocation import (
     LocationRecord,
     ensure_database,
+    hash_tracking_pin,
     phone_number_country,
     reverse_geocode,
     store_location,
     validate_phone_number,
+    verify_tracking_pin,
 )
 
 
@@ -29,18 +31,28 @@ DATABASE_PATH = os.environ.get(
     "LOCATION_DB_PATH", os.path.join(os.path.dirname(__file__), "locations.db")
 )
 BASE_URL = os.environ.get("LOCATION_APP_BASE_URL", "http://localhost:8501")
+PIN_SALT = os.environ.get("LOCATION_PIN_SALT", "change-me")
+MAX_HISTORY = 20
 
 
 def get_db_connection() -> sqlite3.Connection:
     return sqlite3.connect(DATABASE_PATH)
 
 
-def register_phone(phone_number: str) -> RegistrationResult:
+def register_phone(phone_number: str, tracking_pin: str) -> RegistrationResult:
     token = secrets.token_urlsafe(16)
     with get_db_connection() as connection:
         connection.execute(
-            "INSERT INTO registrations (token, phone_number, created_at) VALUES (?, ?, ?)",
-            (token, phone_number, datetime.now(timezone.utc).isoformat()),
+            """
+            INSERT INTO registrations (token, phone_number, tracking_pin_hash, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                token,
+                phone_number,
+                hash_tracking_pin(tracking_pin, PIN_SALT),
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
     return RegistrationResult(token=token, phone=phone_number)
 
@@ -73,7 +85,47 @@ def read_latest_location(token: str) -> Optional[LocationRecord]:
     )
 
 
-def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> None:
+def read_location_history(token: str, limit: int = MAX_HISTORY) -> list[dict]:
+    with get_db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT latitude, longitude, accuracy, recorded_at
+            FROM locations
+            WHERE token = ?
+            ORDER BY recorded_at DESC
+            LIMIT ?
+            """,
+            (token, limit),
+        ).fetchall()
+
+    return [
+        {
+            "Latitude": row[0],
+            "Longitude": row[1],
+            "Accuracy (m)": row[2] if row[2] is not None else "Unknown",
+            "Shared at": row[3],
+        }
+        for row in rows
+    ]
+
+
+def get_tracking_pin_hash(token: str) -> Optional[str]:
+    with get_db_connection() as connection:
+        row = connection.execute(
+            "SELECT tracking_pin_hash FROM registrations WHERE token = ?",
+            (token,),
+        ).fetchone()
+    if not row:
+        return None
+    return row[0]
+
+
+def render_share_page(
+    token: str,
+    latest_location: Optional[LocationRecord],
+    live_enabled: bool,
+    live_interval: int,
+) -> None:
     st.title("Share your location")
     st.write(
         "Tap the button below to share your current location. Your browser will ask for permission."
@@ -84,6 +136,25 @@ def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> 
             "A location was already shared. You can share again to update it for your family."
         )
 
+    enable_live = st.checkbox("Enable live tracking", value=live_enabled)
+    interval_seconds = st.number_input(
+        "Live tracking interval (seconds)",
+        min_value=10,
+        max_value=300,
+        value=live_interval,
+        step=5,
+        disabled=not enable_live,
+    )
+    if enable_live != live_enabled or interval_seconds != live_interval:
+        st.experimental_set_query_params(
+            mode="share",
+            token=token,
+            live="1" if enable_live else "0",
+            interval=str(interval_seconds),
+        )
+        st.stop()
+
+    live_flag = "true" if enable_live else "false"
     st.components.v1.html(
         f"""
         <div style="margin-top: 1rem;">
@@ -100,8 +171,10 @@ def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> 
         <script>
           const statusEl = document.getElementById("status");
           const shareBtn = document.getElementById("shareBtn");
+          const liveEnabled = {live_flag};
+          const liveIntervalMs = {interval_seconds} * 1000;
 
-          shareBtn.addEventListener("click", () => {{
+          function requestLocation() {{
             statusEl.textContent = "Requesting location...";
             if (!navigator.geolocation) {{
               statusEl.textContent = "Geolocation is not supported in this browser.";
@@ -117,6 +190,8 @@ def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> 
                 params.set("lon", position.coords.longitude.toString());
                 params.set("accuracy", position.coords.accuracy.toString());
                 params.set("shared", "1");
+                params.set("live", liveEnabled ? "1" : "0");
+                params.set("interval", "{interval_seconds}");
                 window.location.search = params.toString();
               }},
               (error) => {{
@@ -124,10 +199,15 @@ def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> 
               }},
               {{ enableHighAccuracy: true, timeout: 15000 }}
             );
-          }});
+          }}
+
+          shareBtn.addEventListener("click", requestLocation);
+          if (liveEnabled) {{
+            setInterval(requestLocation, liveIntervalMs);
+          }}
         </script>
         """,
-        height=200,
+        height=260,
     )
 
     st.caption("Only share this link with family you trust. You can close it any time.")
@@ -135,6 +215,12 @@ def render_share_page(token: str, latest_location: Optional[LocationRecord]) -> 
 
 def render_tracking_page(token: str) -> None:
     st.title("Latest shared location")
+
+    pin_hash = get_tracking_pin_hash(token)
+    pin = st.text_input("Tracking PIN", type="password")
+    if pin_hash and not verify_tracking_pin(pin, PIN_SALT, pin_hash):
+        st.warning("Enter the tracking PIN to view the location dashboard.")
+        return
 
     location = read_latest_location(token)
     if not location:
@@ -144,7 +230,9 @@ def render_tracking_page(token: str) -> None:
     st.metric("Latitude", f"{location.latitude:.6f}")
     st.metric("Longitude", f"{location.longitude:.6f}")
     st.write(f"Accuracy: {location.accuracy or 'Unknown'} meters")
-    st.write(f"Shared at: {location.recorded_at}")
+    st.success(f"Last consented at: {location.recorded_at}")
+    if location.accuracy and location.accuracy > 100:
+        st.warning("Low GPS accuracy detected. Location may be approximate.")
 
     address, place_type, place_label = reverse_geocode(location.latitude, location.longitude)
     if address:
@@ -165,6 +253,11 @@ def render_tracking_page(token: str) -> None:
     st.caption("Legend: blue dot = shared phone location.")
     st.caption("Refresh this page to load the most recent update.")
 
+    history = read_location_history(token)
+    if history:
+        st.subheader("Location history")
+        st.dataframe(history, use_container_width=True)
+
 
 def render_registration_page() -> None:
     st.title("Family Location Share")
@@ -180,6 +273,11 @@ def render_registration_page() -> None:
             "Family member phone number (include country code)",
             placeholder="+1 555 555 1234",
         )
+        tracking_pin = st.text_input(
+            "Tracking PIN (4-8 digits)",
+            type="password",
+            placeholder="1234",
+        )
         submitted = st.form_submit_button("Create sharing link")
 
     if not submitted:
@@ -190,8 +288,11 @@ def render_registration_page() -> None:
     if not validation.is_valid:
         st.error(validation.error)
         return
+    if not tracking_pin.isdigit() or not (4 <= len(tracking_pin) <= 8):
+        st.error("Tracking PIN must be 4-8 digits.")
+        return
 
-    registration = register_phone(validation.normalized)
+    registration = register_phone(validation.normalized, tracking_pin)
     country = phone_number_country(registration.phone)
     share_url = build_link("share", registration.token)
     track_url = build_link("track", registration.token)
@@ -216,6 +317,8 @@ def main() -> None:
         lon = params.get("lon", [None])[0]
         accuracy = params.get("accuracy", [None])[0]
         shared = params.get("shared", [None])[0]
+        live = params.get("live", ["0"])[0] == "1"
+        interval = int(params.get("interval", ["30"])[0])
 
         if shared and lat and lon:
             location = store_location(
@@ -227,6 +330,8 @@ def main() -> None:
             )
             st.success("Location shared successfully!")
             st.write(f"Latitude: {location.latitude}, Longitude: {location.longitude}")
+            if location.accuracy and location.accuracy > 100:
+                st.warning("Low GPS accuracy detected. Consider moving to an open area.")
             address, place_type, place_label = reverse_geocode(
                 location.latitude, location.longitude
             )
@@ -247,7 +352,7 @@ def main() -> None:
             st.caption("Legend: blue dot = shared phone location.")
 
         latest_location = read_latest_location(token)
-        render_share_page(token, latest_location)
+        render_share_page(token, latest_location, live, interval)
         return
 
     if mode == "track" and token:

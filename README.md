@@ -10,7 +10,8 @@ are only used to identify who should receive the link and the country/region.
 - Phone number validation using `phonenumbers` (requires country code).
 - Location capture using the browser's Geolocation API (explicit consent required).
 - Optional reverse geocoding via `geopy`/Nominatim.
-- Simple tracking dashboard that shows the last shared location on a map.
+- Live tracking option with accuracy warnings.
+- Tracking dashboard with map, history table, and PIN protection.
 
 ## Requirements
 
@@ -39,6 +40,12 @@ shared links point back to your deployment:
 
 ```bash
 export LOCATION_APP_BASE_URL="https://your-app.example.com"
+```
+
+Set a strong salt for tracking PIN hashing:
+
+```bash
+export LOCATION_PIN_SALT="replace-with-a-random-secret"
 ```
 
 ## Notes

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -124,6 +125,7 @@ def ensure_database(database_path: str) -> None:
             CREATE TABLE IF NOT EXISTS registrations (
                 token TEXT PRIMARY KEY,
                 phone_number TEXT NOT NULL,
+                tracking_pin_hash TEXT,
                 created_at TEXT NOT NULL
             )
             """
@@ -141,6 +143,23 @@ def ensure_database(database_path: str) -> None:
             )
             """
         )
+        columns = connection.execute("PRAGMA table_info(registrations)").fetchall()
+        column_names = {column[1] for column in columns}
+        if "tracking_pin_hash" not in column_names:
+            connection.execute(
+                "ALTER TABLE registrations ADD COLUMN tracking_pin_hash TEXT"
+            )
+
+
+def hash_tracking_pin(pin: str, salt: str) -> str:
+    digest = hashlib.sha256(f"{salt}:{pin}".encode("utf-8")).hexdigest()
+    return digest
+
+
+def verify_tracking_pin(pin: str, salt: str, pin_hash: Optional[str]) -> bool:
+    if not pin_hash:
+        return False
+    return hash_tracking_pin(pin, salt) == pin_hash
 
 
 def store_location(
