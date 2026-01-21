@@ -172,12 +172,22 @@ def render_share_page(
               background: #22c55e;
               color: #0f172a;
               font-weight: 700;
-              cursor: pointer;">Please accept to share your location</button>
+              cursor: pointer;">Yes, share my location</button>
+          <button id="rejectBtn" style="
+              padding: 0.75rem 1.25rem;
+              border-radius: 10px;
+              border: none;
+              background: #ef4444;
+              color: #f8fafc;
+              font-weight: 700;
+              cursor: pointer;
+              margin-left: 0.5rem;">No, do not share</button>
           <div id="status" style="margin-top: 0.75rem;">Waiting for your permission.</div>
         </div>
         <script>
           const statusEl = document.getElementById("status");
           const shareBtn = document.getElementById("shareBtn");
+          const rejectBtn = document.getElementById("rejectBtn");
           const liveEnabled = {live_flag};
           const liveIntervalMs = {interval_seconds} * 1000;
 
@@ -211,6 +221,9 @@ def render_share_page(
           }}
 
           shareBtn.addEventListener("click", requestLocation);
+          rejectBtn.addEventListener("click", () => {{
+            statusEl.textContent = "You chose not to share your location.";
+          }});
           if (liveEnabled) {{
             setInterval(requestLocation, liveIntervalMs);
           }}
