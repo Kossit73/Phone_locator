@@ -3,9 +3,10 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 import phonenumbers
+from phonenumbers import geocoder
 from geopy.exc import GeocoderServiceError
 from geopy.geocoders import Nominatim
 
@@ -36,12 +37,19 @@ class LocationRecord:
         }
 
 
-def validate_phone_number(phone_number: str, region: str = "US") -> PhoneValidation:
+def validate_phone_number(phone_number: str) -> PhoneValidation:
     if not phone_number.strip():
         return PhoneValidation(is_valid=False, normalized="", error="Phone number is required.")
 
+    if not phone_number.strip().startswith("+"):
+        return PhoneValidation(
+            is_valid=False,
+            normalized="",
+            error="Include the country code (for example, +1...)",
+        )
+
     try:
-        parsed = phonenumbers.parse(phone_number, region)
+        parsed = phonenumbers.parse(phone_number, None)
     except phonenumbers.NumberParseException:
         return PhoneValidation(
             is_valid=False,
@@ -58,6 +66,19 @@ def validate_phone_number(phone_number: str, region: str = "US") -> PhoneValidat
 
     normalized = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
     return PhoneValidation(is_valid=True, normalized=normalized)
+
+
+def phone_number_country(phone_number: str) -> Optional[str]:
+    try:
+        parsed = phonenumbers.parse(phone_number, None)
+    except phonenumbers.NumberParseException:
+        return None
+
+    if not phonenumbers.is_valid_number(parsed):
+        return None
+
+    description = geocoder.description_for_number(parsed, "en")
+    return description or None
 
 
 def ensure_database(database_path: str) -> None:
@@ -112,14 +133,17 @@ def store_location(
     )
 
 
-def reverse_geocode(latitude: float, longitude: float) -> Optional[str]:
+def reverse_geocode(latitude: float, longitude: float) -> Tuple[Optional[str], Optional[str]]:
     geolocator = Nominatim(user_agent="family-location-app")
     try:
         location = geolocator.reverse((latitude, longitude), exactly_one=True, timeout=10)
     except GeocoderServiceError:
-        return None
+        return None, None
 
     if not location:
-        return None
+        return None, None
 
-    return location.address
+    address = location.address
+    raw = location.raw or {}
+    place_type = raw.get("type") or raw.get("category")
+    return address, place_type

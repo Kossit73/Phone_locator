@@ -12,6 +12,7 @@ import streamlit as st
 from geolocation import (
     LocationRecord,
     ensure_database,
+    phone_number_country,
     reverse_geocode,
     store_location,
     validate_phone_number,
@@ -145,9 +146,11 @@ def render_tracking_page(token: str) -> None:
     st.write(f"Accuracy: {location.accuracy or 'Unknown'} meters")
     st.write(f"Shared at: {location.recorded_at}")
 
-    address = reverse_geocode(location.latitude, location.longitude)
+    address, place_type = reverse_geocode(location.latitude, location.longitude)
     if address:
         st.write(f"Approximate address: {address}")
+    if place_type:
+        st.write(f"Place type: {place_type}")
 
     st.markdown(f"[Open on map]({location.map_link()})")
     st.caption("Refresh this page to load the most recent update.")
@@ -158,10 +161,13 @@ def render_registration_page() -> None:
     st.write(
         "Create a private link that your family member opens on their phone to securely share their location."
     )
+    st.caption(
+        "Phone numbers only identify the country/region. Exact location requires the recipient to share it."
+    )
 
     with st.form("register"):
         phone_number = st.text_input(
-            "Family member phone number",
+            "Family member phone number (include country code)",
             placeholder="+1 555 555 1234",
         )
         submitted = st.form_submit_button("Create sharing link")
@@ -176,11 +182,14 @@ def render_registration_page() -> None:
         return
 
     registration = register_phone(validation.normalized)
+    country = phone_number_country(registration.phone)
     share_url = build_link("share", registration.token)
     track_url = build_link("track", registration.token)
 
     st.success("Share link created!")
     st.write(f"Send this link to **{registration.phone}** so they can share their location.")
+    if country:
+        st.write(f"Detected country/region: **{country}**")
     st.code(share_url, language="text")
     st.write("Tracking page:")
     st.code(track_url, language="text")
@@ -208,6 +217,11 @@ def main() -> None:
             )
             st.success("Location shared successfully!")
             st.write(f"Latitude: {location.latitude}, Longitude: {location.longitude}")
+            address, place_type = reverse_geocode(location.latitude, location.longitude)
+            if address:
+                st.write(f"Approximate address: {address}")
+            if place_type:
+                st.write(f"Place type: {place_type}")
 
         latest_location = read_latest_location(token)
         render_share_page(token, latest_location)
