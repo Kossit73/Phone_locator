@@ -1,0 +1,4 @@
+geopy==2.4.1
+phonenumbers==8.13.31
+streamlit==1.33.0
+twilio==9.0.2
